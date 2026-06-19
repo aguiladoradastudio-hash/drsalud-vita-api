@@ -155,7 +155,11 @@ app.post('/vita', rateLimit, async (req, res) => {
     question = question.replace(/[\x00-\x1F]/g, ' ').trim()
 
     // ¿La pregunta va sobre un medicamento concreto? Si NO, excluimos prospectos AEMPS.
-    const medQuery = /medicament|medicina|pastill|f[aá]rmac|prospecto|comprimid|c[aá]psula|jarabe|dosis|efectos?\s+(secundari|advers)|contraindicaci|principio activo|para qu[eé] sirve|me tomo|qu[eé]\s+(me\s+)?tomo|antibiotic|ibuprofen|paracetamol|omeprazol|amoxicilin/i.test(question)
+    // ¿pide RECOMENDACION/eleccion? -> nunca mostramos prospectos (Vita se niega)
+    const recoSeeking = /qu[e\u00e9]\s+(medicament|pastill|medicin|tom|doy|dar|le\s+doy|me\s+tomo|debo)|me\s+conviene|cu[a\u00e1]l\s+(es\s+)?mejor|qu[e\u00e9]\s+es\s+mejor|recomi[e\u00e9]nda/i.test(question)
+    // ¿pregunta por explicar un medicamento CONCRETO? -> si mostramos prospecto
+    const explainMed = /para\s+qu[e\u00e9]\s+sirve|efectos?\s+(secundari|advers)|contraindicaci|prospecto|principio\s+activo|ibuprofen|paracetamol|omeprazol|amoxicilin|ibuprofeno|naproxen|aspirin/i.test(question)
+    const medQuery = explainMed && !recoSeeking
 
     const emb = await callJson('https://api.openai.com/v1/embeddings',
       { Authorization: `Bearer ${OPENAI_API_KEY}` },
