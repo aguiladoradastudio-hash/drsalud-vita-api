@@ -74,7 +74,7 @@ async function main() {
           })
         })
         const j = await r.json()
-        if (j.ok) { enviados++; fragmentos += (j.fragmentos || 0); markDone(nreg) }
+        if (j.ok && (j.fragmentos || 0) > 0) { enviados++; fragmentos += j.fragmentos; markDone(nreg) }
         else saltados++
       } catch { saltados++ }
       if (enviados % 50 === 0 && enviados) console.log(`   …${enviados} prospectos (${fragmentos} fragmentos) | pagina ${pg}/${pages}`)
