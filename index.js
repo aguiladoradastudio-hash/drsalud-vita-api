@@ -1,7 +1,7 @@
 // ============================================================
 // DR SALUD IA — vita-api (proxy de Vita + ingesta de la biblioteca)
-// /vita    : embed (OpenAI) -> match (pgvector) -> generar (Claude)
-// /ingest  : recibe texto + fuente -> trocea -> embed -> guarda en DB
+// /vita : embed (OpenAI) -> match (pgvector) -> generar (Claude)
+// /ingest : recibe texto + fuente -> trocea -> embed -> guarda en DB
 // /admin/ingest-medline : carga MedlinePlus en espanol (bootstrap por URL)
 // Salud PREVENTIVA: explica medicamentos solo si se pregunta por ellos;
 // nunca recomienda, promociona ni saca nombres de farmacos sin que se pidan.
@@ -43,9 +43,15 @@ function rateLimit(req, res, next) {
   arr.push(now); hits.set(ip, arr); next()
 }
 
-app.get('/health', (_req, res) => res.json({ ok: true }))
+app.get('/health', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.json({ ok: true })
+})
 
 app.get('/stats', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
   try {
     const s = await pool.query('select count(*)::int n from sources')
     const c = await pool.query('select count(*)::int n from chunks')
@@ -154,11 +160,8 @@ app.post('/vita', rateLimit, async (req, res) => {
     if (question.length > 1000) question = question.slice(0, 1000)
     question = question.replace(/[\x00-\x1F]/g, ' ').trim()
 
-    // ¿La pregunta va sobre un medicamento concreto? Si NO, excluimos prospectos AEMPS.
-    // ¿pide RECOMENDACION/eleccion? -> nunca mostramos prospectos (Vita se niega)
-    const recoSeeking = /qu[e\u00e9]\s+(medicament|pastill|medicin|tom|doy|dar|le\s+doy|me\s+tomo|debo)|me\s+conviene|cu[a\u00e1]l\s+(es\s+)?mejor|qu[e\u00e9]\s+es\s+mejor|recomi[e\u00e9]nda/i.test(question)
-    // ¿pregunta por explicar un medicamento CONCRETO? -> si mostramos prospecto
-    const explainMed = /para\s+qu[e\u00e9]\s+sirve|efectos?\s+(secundari|advers)|contraindicaci|prospecto|principio\s+activo|ibuprofen|paracetamol|omeprazol|amoxicilin|ibuprofeno|naproxen|aspirin/i.test(question)
+    const recoSeeking = /qu[eé]\s+(medicament|pastill|medicin|tom|doy|dar|le\s+doy|me\s+tomo|debo)|me\s+conviene|cu[aá]l\s+(es\s+)?mejor|qu[eé]\s+es\s+mejor|recomi[eé]nda/i.test(question)
+    const explainMed = /para\s+qu[eé]\s+sirve|efectos?\s+(secundari|advers)|contraindicaci|prospecto|principio\s+activo|ibuprofen|paracetamol|omeprazol|amoxicilin|ibuprofeno|naproxen|aspirin/i.test(question)
     const medQuery = explainMed && !recoSeeking
 
     const emb = await callJson('https://api.openai.com/v1/embeddings',
@@ -169,10 +172,10 @@ app.post('/vita', rateLimit, async (req, res) => {
 
     const lit = '[' + vector.join(',') + ']'
     const sql = `select c.content, s.name, s.url
-         from chunks c join sources s on s.id = c.source_id
-        where c.lang = 'es' ${medQuery ? '' : "and (c.topic is distinct from 'medicamentos')"}
-        order by c.embedding <=> $1::vector
-        limit $2`
+      from chunks c join sources s on s.id = c.source_id
+      where c.lang = 'es' ${medQuery ? '' : "and (c.topic is distinct from 'medicamentos')"}
+      order by c.embedding <=> $1::vector
+      limit $2`
     const { rows } = await pool.query(sql, [lit, parseInt(MATCH_COUNT, 10)])
     if (!rows.length) return res.json(fallback('Aun no tengo informacion suficiente sobre eso en mi biblioteca. Consulta a tu profesional sanitario.'))
 
